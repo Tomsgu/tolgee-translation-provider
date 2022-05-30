@@ -117,7 +117,7 @@ class TranslationsApi
      */
     public function createOrUpdateTranslations(string $key, array $translations): void
     {
-        $response = $this->client->request('PUT', '/v2/projects/translations', [
+        $response = $this->client->request('POST', '/v2/projects/translations', [
             'json' => [
                 'key' => $key,
                 'translations' => $translations
