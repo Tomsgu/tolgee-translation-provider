@@ -45,6 +45,10 @@ class TranslationsApi
             }
 
             $data = json_decode($response->getContent(), true);
+            if (array_key_exists('_embedded', $data) === false || array_key_exists('keys', $data['_embedded'])){
+                return $catalogue;
+            }
+
             $keys = array_map(function (array $key) {
                 $translations = array_map(fn (
                     array $translation
@@ -134,8 +138,11 @@ class TranslationsApi
         // Symfony by default prefixes untranslated messages with "__".
         $updatedTranslations = json_decode($response->getContent(), true);
         foreach ($updatedTranslations['translations'] as $translation) {
-            if (str_starts_with($translation['text'], '__') === true) {
-                $this->setTranslationState($translation['id'], Translation::UNTRANSLATED_STATE);
+            if ($translation['text'] !== null && str_starts_with($translation['text'],
+                    '__') === true) {
+                if (str_starts_with($translation['text'], '__') === true) {
+                    $this->setTranslationState($translation['id'], Translation::UNTRANSLATED_STATE);
+                }
             }
         }
     }
