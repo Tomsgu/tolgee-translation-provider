@@ -45,21 +45,22 @@ class TranslationsApi
             }
 
             $data = json_decode($response->getContent(), true);
-            if (array_key_exists('_embedded', $data) === false || array_key_exists('keys', $data['_embedded'])){
+            if (array_key_exists('_embedded', $data) === false || array_key_exists('keys',
+                    $data['_embedded']) === false) {
                 return $catalogue;
             }
 
             $keys = array_map(function (array $key) {
-                $translations = array_map(fn (
+                $translations = array_map(fn(
                     array $translation
                 ) => new Translation(
                     $translation['id'],
-                    $translation['text'],
+                    $translation['text'] ?? '',
                     $translation['state']
                 ), $key['translations']);
 
                 $tags = array_map(
-                    fn (array $tag) => new Tag($tag['id'], $tag['name']),
+                    fn(array $tag) => new Tag($tag['id'], $tag['name']),
                     $key['keyTags']
                 );
 
