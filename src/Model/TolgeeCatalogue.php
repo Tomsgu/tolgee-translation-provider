@@ -45,6 +45,28 @@ class TolgeeCatalogue
         return true;
     }
 
+    public function hasKeyInAnyDomain(string $searchKey): bool
+    {
+        foreach ($this->keys as $domain => $key) {
+            if ($this->hasKey($domain, $searchKey) === true){
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function getKeyFromAnyDomain(string $searchKey): ?Key
+    {
+        foreach ($this->keys as $domain => $key) {
+            if ($this->hasKey($domain, $searchKey) === true){
+                return $this->keys[$domain][$searchKey];
+            }
+        }
+
+        return null;
+    }
+
     public function hasDomain(string $domain): bool
     {
         return array_key_exists($domain, $this->keys);

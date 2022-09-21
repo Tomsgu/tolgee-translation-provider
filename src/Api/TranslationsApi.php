@@ -78,6 +78,9 @@ class TranslationsApi
         return $catalogue;
     }
 
+    /**
+     * @param array<int> $ids
+     */
     public function deleteKeys(array $ids): void
     {
         $url = sprintf('/v2/projects/keys/%s', implode('|', $ids));
@@ -107,6 +110,25 @@ class TranslationsApi
             $this->logger->error(sprintf(
                 'Unable to add new translation key "%s" to Tolgee: (status code: "%s") "%s".',
                 $key,
+                $response->getStatusCode(),
+                $response->getContent(false)
+            ));
+        }
+    }
+
+    public function tagKey(string $domain, Key $key): void
+    {
+        $response = $this->client->request('PUT', '/v2/projects/keys/'.$key->id.'/tags', [
+            'json' => [
+                'name' => $domain
+            ]
+        ]);
+
+        if ($response->getStatusCode() !== Response::HTTP_OK) {
+            $this->logger->error(sprintf(
+                'Unable to tag an existing key "%s" with a tag "%s" to Tolgee: (status code: "%s") "%s".',
+                $key->name,
+                $domain,
                 $response->getStatusCode(),
                 $response->getContent(false)
             ));
