@@ -39,8 +39,8 @@ final class TolgeeProviderFactory extends AbstractProviderFactory
 
         $client = $this->client->withOptions([
             'base_uri' => sprintf('https://%s', $endpoint),
-            'query' => [
-                'ak' => $this->getUser($dsn),
+            'headers' => [
+                'X-API-Key' => $this->getUser($dsn)
             ]
         ]);
 
