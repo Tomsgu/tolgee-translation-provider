@@ -25,11 +25,40 @@ class TranslationsApi
     ) {
     }
 
+    public function fetchAllLanguages(): array
+    {
+        $url = sprintf('/v2/projects/languages?size=%d&page=0', self::PAGE_SIZE);
+        $response = $this->client->request('GET', $url);
+
+        if ($response->getStatusCode() !== Response::HTTP_OK) {
+            $error = sprintf(
+                'Unable to fetch translations from Tolgee: (status code: "%s") "%s".',
+                $response->getStatusCode(),
+                $response->getContent(false)
+            );
+            $this->logger->error($error);
+
+            return [];
+        }
+
+        $data = json_decode($response->getContent(), true);
+        if (array_key_exists('_embedded', $data) === false || array_key_exists('languages',
+                $data['_embedded']) === false) {
+            return [];
+        }
+
+        return array_map(fn(array $language) => $language['tag'], $data['_embedded']['languages']);
+    }
+
     public function fetchAllKeys(): TolgeeCatalogue
     {
         $catalogue = new TolgeeCatalogue();
         $page = 0;
-        $url = sprintf('/v2/projects/translations?size=%d&page=', self::PAGE_SIZE);
+        $languages = $this->fetchAllLanguages();
+        $baseUrl = array_reduce($languages,
+            fn(string $carryUrl, string $lang) => sprintf('%s&languages=%s', $carryUrl, $lang),
+            sprintf('/v2/projects/translations?size=%d', self::PAGE_SIZE));
+        $url = sprintf('%s&page=', $baseUrl);
         while (1) {
             $response = $this->client->request('GET', $url . $page++);
 
