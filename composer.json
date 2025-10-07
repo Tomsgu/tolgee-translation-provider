@@ -2,7 +2,11 @@
     "name": "tomsgu/tolgee-translation-provider",
     "type": "symfony-translation-bridge",
     "description": "Symfony Tolgee Translation Provider Bridge",
-    "keywords": ["tolgee", "translation", "provider"],
+    "keywords": [
+        "tolgee",
+        "translation",
+        "provider"
+    ],
     "homepage": "https://symfony.com",
     "license": "MIT",
     "authors": [
@@ -19,13 +23,14 @@
         "symfony/framework-bundle": "^6.0|^7.0"
     },
     "require-dev": {
-        "phpstan/phpstan": "^1.10",
-        "vimeo/psalm": "5.18",
-        "symplify/easy-coding-standard": "^12.1",
-        "phpunit/phpunit": "^9.5"
+        "phpstan/phpstan": "^2.1",
+        "symplify/easy-coding-standard": "^12.5",
+        "phpunit/phpunit": "^12.4"
     },
     "autoload": {
-        "psr-4": { "Tomsgu\\TolgeeTranslationProvider\\": "src/" },
+        "psr-4": {
+            "Tomsgu\\TolgeeTranslationProvider\\": "src/"
+        },
         "exclude-from-classmap": [
             "/Tests/"
         ]
