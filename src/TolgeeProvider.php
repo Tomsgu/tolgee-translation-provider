@@ -16,7 +16,7 @@ use Tomsgu\TolgeeTranslationProvider\Api\TranslationsApi;
  * @author Tomas Jakl <tomasjakl@tomsgu.com>
  *
  * In Tolgee:
- *    - Tags refers to Symfony's translation domains
+ *    - Tag refers to Symfony translation domain
  */
 class TolgeeProvider implements ProviderInterface
 {
