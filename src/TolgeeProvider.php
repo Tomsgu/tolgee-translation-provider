@@ -45,24 +45,32 @@ class TolgeeProvider implements ProviderInterface
         }
 
         $tolgeeCatalogue = $this->translationsApi->fetchAllKeys();
+        $modified = false;
+
         foreach ($catalogue->all() as $domain => $messages) {
-            // Another fetch is needed, otherwise it will try to add the same key
-            // for a different domains, if we add the key for the first domain.
-            $tolgeeCatalogue = $this->translationsApi->fetchAllKeys();
             foreach ($messages as $key => $translation) {
                 if ($tolgeeCatalogue->hasKeyInAnyDomain($key) === true) {
                     if ($tolgeeCatalogue->hasKey($domain, $key) === false) {
                         $tolgeeKey = $tolgeeCatalogue->getKeyFromAnyDomain($key);
                         $this->translationsApi->tagKey($domain, $tolgeeKey);
+                        $modified = true;
                     }
                     continue;
                 }
                 if ($tolgeeCatalogue->hasKey($domain, $key) === false) {
                     $this->translationsApi->createKey($key, $domain);
+                    $modified = true;
                 }
             }
         }
 
+        if ($modified) {
+            // Another fetch is needed, otherwise it will try to add the same key
+            // for a different domains, if we add the key for the first domain.
+            $tolgeeCatalogue = $this->translationsApi->fetchAllKeys();
+        }
+
+        $tolgeeCatalogue = $this->translationsApi->fetchAllKeys();
         $localMessages = [];
         foreach ($translatorBag->getCatalogues() as $catalogue) {
             $locale = $catalogue->getLocale();
