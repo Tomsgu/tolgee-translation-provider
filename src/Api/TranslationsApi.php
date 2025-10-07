@@ -153,7 +153,7 @@ class TranslationsApi
             ]
         ]);
 
-        if ($response->getStatusCode() !== Response::HTTP_CREATED) {
+        if (!in_array($response->getStatusCode(), [Response::HTTP_CREATED, Response::HTTP_OK])) {
             $this->logger->error(sprintf(
                 'Unable to add new translation key "%s" to Tolgee: (status code: "%s") "%s".',
                 $key,
