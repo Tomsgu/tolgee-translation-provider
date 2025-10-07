@@ -127,6 +127,9 @@ class TranslationsApi
      */
     public function deleteKeys(array $ids): void
     {
+        if ($ids === []) {
+            return;
+        }
         $url = sprintf('/v2/projects/keys/%s', implode('|', $ids));
 
         $response = $this->client->request('DELETE', $url);
