@@ -30,15 +30,16 @@ final class TolgeeProviderFactory extends AbstractProviderFactory
      */
     public function create(Dsn $dsn): ProviderInterface
     {
-        if ('tolgee' !== $dsn->getScheme()) {
-            throw new UnsupportedSchemeException($dsn, 'tolgee', $this->getSupportedSchemes());
+        if (!in_array($dsn->getScheme(), $this->getSupportedSchemes(), true)) {
+            throw new UnsupportedSchemeException($dsn, $dsn->getScheme(), $this->getSupportedSchemes());
         }
 
         $endpoint = 'default' === $dsn->getHost() ? self::HOST : $dsn->getHost();
         $endpoint .= $dsn->getPort() ? ':' . $dsn->getPort() : '';
 
+        $scheme = $dsn->getScheme() === 'tolgees' ? 'https://' : 'http://';
         $client = $this->client->withOptions([
-            'base_uri' => sprintf('https://%s', $endpoint),
+            'base_uri' => sprintf('%s%s', $scheme, $endpoint),
             'headers' => [
                 'X-API-Key' => $this->getUser($dsn)
             ]
@@ -49,6 +50,6 @@ final class TolgeeProviderFactory extends AbstractProviderFactory
 
     protected function getSupportedSchemes(): array
     {
-        return ['tolgee'];
+        return ['tolgee', 'tolgees'];
     }
 }
