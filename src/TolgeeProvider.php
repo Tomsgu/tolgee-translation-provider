@@ -125,7 +125,7 @@ class TolgeeProvider implements ProviderInterface
         foreach ($catalogue->all() as $domain => $messages) {
             foreach ($messages as $id => $message) {
                 if ($tolgeeCatalogue->hasKey($domain, $id) === true) {
-                    $ids[] = $tolgeeCatalogue->getKeyById($domain, $id)->id;
+                    $ids[] = $tolgeeCatalogue->getKeyByName($domain, $id)->id;
                 }
             }
         }

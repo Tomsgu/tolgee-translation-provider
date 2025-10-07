@@ -102,7 +102,7 @@ class TolgeeCatalogue
         return array_filter($this->keys[$domain], fn (Key $key) => $key->hasTranslation($locale));
     }
 
-    public function getKeyById(string $domain, string $id): Key
+    public function getKeyByName(string $domain, string $id): Key
     {
         return $this->keys[$domain][$id];
     }
