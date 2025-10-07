@@ -70,7 +70,6 @@ class TolgeeProvider implements ProviderInterface
             $tolgeeCatalogue = $this->translationsApi->fetchAllKeys();
         }
 
-        $tolgeeCatalogue = $this->translationsApi->fetchAllKeys();
         $localMessages = [];
         foreach ($translatorBag->getCatalogues() as $catalogue) {
             $locale = $catalogue->getLocale();
@@ -108,11 +107,15 @@ class TolgeeProvider implements ProviderInterface
                     continue;
                 }
                 $catalogue = new MessageCatalogue($locale);
+                $added = false;
                 foreach ($tolgeeCatalogue->getKeysByDomainAndLocale($domain, $locale) as $key) {
                     $catalogue->set($key->name, $key->getTranslation($locale)->text, $domain);
+                    $added = true;
                 }
 
-                $translatorBag->addCatalogue($catalogue);
+                if ($added) {
+                    $translatorBag->addCatalogue($catalogue);
+                }
             }
         }
 
