@@ -42,12 +42,14 @@ class TranslationsApi
         }
 
         $data = json_decode($response->getContent(), true);
-        if (array_key_exists('_embedded', $data) === false || array_key_exists('languages',
-                $data['_embedded']) === false) {
+        if (array_key_exists('_embedded', $data) === false || array_key_exists(
+            'languages',
+            $data['_embedded']
+        ) === false) {
             return [];
         }
 
-        return array_map(fn(array $language) => $language['tag'], $data['_embedded']['languages']);
+        return array_map(fn (array $language) => $language['tag'], $data['_embedded']['languages']);
     }
 
     public function fetchAllKeys(): TolgeeCatalogue
@@ -55,9 +57,11 @@ class TranslationsApi
         $catalogue = new TolgeeCatalogue();
         $page = 0;
         $languages = $this->fetchAllLanguages();
-        $baseUrl = array_reduce($languages,
-            fn(string $carryUrl, string $lang) => sprintf('%s&languages=%s', $carryUrl, $lang),
-            sprintf('/v2/projects/translations?size=%d', self::PAGE_SIZE));
+        $baseUrl = array_reduce(
+            $languages,
+            fn (string $carryUrl, string $lang) => sprintf('%s&languages=%s', $carryUrl, $lang),
+            sprintf('/v2/projects/translations?size=%d', self::PAGE_SIZE)
+        );
         $url = sprintf('%s&page=', $baseUrl);
         while (1) {
             $response = $this->client->request('GET', $url . $page++);
@@ -74,23 +78,34 @@ class TranslationsApi
             }
 
             $data = json_decode($response->getContent(), true);
-            if (array_key_exists('_embedded', $data) === false || array_key_exists('keys',
-                    $data['_embedded']) === false) {
+            if (array_key_exists('_embedded', $data) === false || array_key_exists(
+                'keys',
+                $data['_embedded']
+            ) === false) {
                 return $catalogue;
             }
 
+
             $keys = array_map(function (array $key) {
-                $translations = array_map(fn(
-                    array $translation
-                ) => new Translation(
-                    $translation['id'],
-                    $translation['text'] ?? '',
-                    $translation['state']
-                ), $key['translations']);
+                $translations = [];
+                foreach (($key['translations'] ?? []) as $langKey => $translation) {
+                    // Some Tolgee versions return an object keyed by the language tag,
+                    // others return a list with 'languageTag' inside each item.
+                    $tag = is_string($langKey) ? $langKey : ($translation['languageTag'] ?? null);
+                    if ($tag === null) {
+                        continue;
+                    }
+
+                    $translations[$tag] = new Translation(
+                        $translation['id'] ?? null,
+                        $translation['text'] ?? '',
+                        $translation['state'] ?? Translation::UNTRANSLATED_STATE
+                    );
+                }
 
                 $tags = array_map(
-                    fn(array $tag) => new Tag($tag['id'], $tag['name']),
-                    $key['keyTags']
+                    fn (array $tag) => new Tag($tag['id'], $tag['name']),
+                    $key['keyTags'] ?? []
                 );
 
                 return new Key($key['keyId'], $key['keyName'], $tags, $translations);
@@ -147,7 +162,7 @@ class TranslationsApi
 
     public function tagKey(string $domain, Key $key): void
     {
-        $response = $this->client->request('PUT', '/v2/projects/keys/'.$key->id.'/tags', [
+        $response = $this->client->request('PUT', '/v2/projects/keys/' . $key->id . '/tags', [
             'json' => [
                 'name' => $domain
             ]
@@ -188,13 +203,11 @@ class TranslationsApi
 
 
         // Symfony by default prefixes untranslated messages with "__".
-        $updatedTranslations = json_decode($response->getContent(), true);
-        foreach ($updatedTranslations['translations'] as $translation) {
-            if ($translation['text'] !== null && str_starts_with($translation['text'],
-                    '__') === true) {
-                if (str_starts_with($translation['text'], '__') === true) {
-                    $this->setTranslationState($translation['id'], Translation::UNTRANSLATED_STATE);
-                }
+        $updated = json_decode($response->getContent(), true);
+        foreach ($updated['translations'] as $translation) {
+            $txt = $translation['text'] ?? null;
+            if ($txt !== null && str_starts_with($txt, '__') && isset($translation['id'])) {
+                $this->setTranslationState((int) $translation['id'], Translation::UNTRANSLATED_STATE);
             }
         }
     }

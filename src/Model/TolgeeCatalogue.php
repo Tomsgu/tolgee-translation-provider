@@ -48,7 +48,7 @@ class TolgeeCatalogue
     public function hasKeyInAnyDomain(string $searchKey): bool
     {
         foreach ($this->keys as $domain => $key) {
-            if ($this->hasKey($domain, $searchKey) === true){
+            if ($this->hasKey($domain, $searchKey) === true) {
                 return true;
             }
         }
@@ -59,7 +59,7 @@ class TolgeeCatalogue
     public function getKeyFromAnyDomain(string $searchKey): ?Key
     {
         foreach ($this->keys as $domain => $key) {
-            if ($this->hasKey($domain, $searchKey) === true){
+            if ($this->hasKey($domain, $searchKey) === true) {
                 return $this->keys[$domain][$searchKey];
             }
         }
