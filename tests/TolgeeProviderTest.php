@@ -4,13 +4,9 @@ declare(strict_types=1);
 
 namespace Tomsgu\TolgeeTranslationProvider\Tests;
 
-use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
-use Symfony\Component\Translation\Dumper\XliffFileDumper;
-use Symfony\Component\Translation\Loader\ArrayLoader;
-use Symfony\Component\Translation\Loader\LoaderInterface;
 use Symfony\Component\Translation\MessageCatalogue;
 use Symfony\Component\Translation\Provider\ProviderInterface;
 use Symfony\Component\Translation\TranslatorBag;
@@ -37,632 +33,268 @@ class TolgeeProviderTest extends ProviderTestCase
         yield ['https://app.tolgee.com:99', 'app.tolgee.com:99', 'tolgee://app.tolgee.com:99'];
     }
 
-    public function testCompleteWriteProcessAddFiles()
+    /**
+     * @param array<int, string> $locales
+     */
+    private function fetchAllKeysResponses(array $locales, array ...$pages): array
     {
-        $this->xliffFileDumper = new XliffFileDumper();
-
-        $expectedMessagesFileContent = <<<'XLIFF'
-<?xml version="1.0" encoding="utf-8"?>
-<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
-  <file source-language="en" target-language="en" datatype="plaintext" original="file.ext">
-    <header>
-      <tool tool-id="symfony" tool-name="Symfony"/>
-    </header>
-    <body>
-      <trans-unit id="ypeBEso" resname="a">
-        <source>a</source>
-        <target>trans_en_a</target>
-      </trans-unit>
-    </body>
-  </file>
-</xliff>
-
-XLIFF;
-
-        $expectedValidatorsFileContent = <<<'XLIFF'
-<?xml version="1.0" encoding="utf-8"?>
-<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
-  <file source-language="en" target-language="en" datatype="plaintext" original="file.ext">
-    <header>
-      <tool tool-id="symfony" tool-name="Symfony"/>
-    </header>
-    <body>
-      <trans-unit id="is7pld7" resname="post.num_comments">
-        <source>post.num_comments</source>
-        <target>{count, plural, one {# comment} other {# comments}}</target>
-      </trans-unit>
-    </body>
-  </file>
-</xliff>
-
-XLIFF;
-
         $responses = [
-            'fetchAllKeys' => function (
-                string $method,
-                string $url,
-                array $options = []
-            ): ResponseInterface {
+            function (string $method, string $url) use ($locales): ResponseInterface {
                 $this->assertSame('GET', $method);
-                $this->assertSame('https://app.tolgee.com/v2/projects/translations?size=2000&page=0&ak=API_KEY',
-                    $url);
+                $this->assertSame('https://app.tolgee.com/v2/projects/languages?size=2000&page=0', $url);
 
                 return new MockResponse(json_encode([
-                    '_embedded' => [
-                        'keys' => []
-                    ],
-                    'page' => [
-                        'number' => 0,
-                        'totalPages' => 1
-                    ]
-                ]));
-            },
-
-            'createKey' => function (string $method, string $url, array $options = []) use (
-                $expectedMessagesFileContent
-            ): ResponseInterface {
-                $this->assertSame('POST', $method);
-                $this->assertSame('https://app.tolgee.com/v2/projects/keys?ak=API_KEY', $url);
-                $this->assertSame('Content-Type: application/json',
-                    $options['normalized_headers']['content-type'][0]);
-                $this->assertSame($expectedMessagesFileContent, $options['body']);
-
-                return new MockResponse(json_encode(['data' => ['id' => 19]]),
-                    ['http_code' => 201]);
-            },
-            'addFile' => function (
-                string $method,
-                string $url,
-                array $options = []
-            ): ResponseInterface {
-                $this->assertSame('POST', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/files', $url);
-                $this->assertSame('{"storageId":19,"name":"messages.xlf"}', $options['body']);
-
-                return new MockResponse(json_encode([
-                    'data' => [
-                        'id' => 199,
-                        'name' => 'messages.xlf'
-                    ]
-                ]));
-            },
-            'addStorage2' => function (string $method, string $url, array $options = []) use (
-                $expectedValidatorsFileContent
-            ): ResponseInterface {
-                $this->assertSame('POST', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/storages', $url);
-                $this->assertSame('Content-Type: application/octet-stream',
-                    $options['normalized_headers']['content-type'][0]);
-                $this->assertSame('Crowdin-API-FileName: validators.xlf',
-                    $options['normalized_headers']['crowdin-api-filename'][0]);
-                $this->assertSame($expectedValidatorsFileContent, $options['body']);
-
-                return new MockResponse(json_encode(['data' => ['id' => 19]]),
-                    ['http_code' => 201]);
-            },
-            'addFile2' => function (
-                string $method,
-                string $url,
-                array $options = []
-            ): ResponseInterface {
-                $this->assertSame('POST', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/files', $url);
-                $this->assertSame('{"storageId":19,"name":"validators.xlf"}', $options['body']);
-
-                return new MockResponse(json_encode([
-                    'data' => [
-                        'id' => 200,
-                        'name' => 'validators.xlf'
-                    ]
+                    '_embedded' => ['languages' => array_map(
+                        static fn (string $tag) => ['tag' => $tag],
+                        $locales
+                    )],
                 ]));
             },
         ];
 
-        $translatorBag = new TranslatorBag();
-        $translatorBag->addCatalogue(new MessageCatalogue('en', [
-            'messages' => ['a' => 'trans_en_a'],
-            'validators' => ['post.num_comments' => '{count, plural, one {# comment} other {# comments}}'],
-        ]));
+        $query = implode('', array_map(static fn (string $l) => '&languages=' . $l, $locales));
+        foreach ($pages as $number => $keys) {
+            $totalPages = count($pages);
+            $responses[] = function (string $method, string $url) use (
+                $query,
+                $number,
+                $totalPages,
+                $keys
+            ): ResponseInterface {
+                $this->assertSame('GET', $method);
+                $this->assertSame(
+                    sprintf(
+                        'https://app.tolgee.com/v2/projects/translations?size=2000%s&page=%d',
+                        $query,
+                        $number
+                    ),
+                    $url
+                );
 
-        $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
-            'base_uri' => 'https://app.tolgee.com',
-            'query' => [
-                'ak' => 'API_KEY',
+                return new MockResponse(json_encode([
+                    '_embedded' => ['keys' => $keys],
+                    'page' => ['number' => $number, 'totalPages' => $totalPages],
+                ]));
+            };
+        }
+
+        return $responses;
+    }
+
+    /**
+     * @param array<string, string> $translations locale => text
+     */
+    private static function tolgeeKey(int $id, string $name, string $domain, array $translations): array
+    {
+        $payload = [];
+        $translationId = $id * 10;
+        foreach ($translations as $locale => $text) {
+            $payload[$locale] = ['id' => $translationId++, 'text' => $text, 'state' => 'TRANSLATED'];
+        }
+
+        return [
+            'keyId' => $id,
+            'keyName' => $name,
+            'keyTags' => [['id' => 1, 'name' => $domain]],
+            'translations' => $payload,
+        ];
+    }
+
+    private function createTolgeeProvider(array $responses, string $defaultLocale = 'en'): ProviderInterface
+    {
+        return $this->createProvider(
+            (new MockHttpClient($responses))->withOptions(['base_uri' => 'https://app.tolgee.com']),
+            $this->getLogger(),
+            $defaultLocale,
+            'app.tolgee.com'
+        );
+    }
+
+    public function testWriteCreatesUnknownKeysThenUploadsTranslations()
+    {
+        $createdKeys = [];
+        $uploaded = [];
+
+        $responses = array_merge(
+            $this->fetchAllKeysResponses(['en', 'fr'], []),
+            [
+                function (string $method, string $url, array $options) use (&$createdKeys): ResponseInterface {
+                    $this->assertSame('POST', $method);
+                    $this->assertSame('https://app.tolgee.com/v2/projects/keys', $url);
+                    $createdKeys[] = json_decode($options['body'], true);
+
+                    return new MockResponse(json_encode(['id' => 11]), ['http_code' => 201]);
+                },
+            ],
+            // write() refetches once it has created a key, so later domains see it.
+            $this->fetchAllKeysResponses(['en', 'fr'], [
+                self::tolgeeKey(11, 'a', 'messages', []),
+            ]),
+            [
+                function (string $method, string $url, array $options) use (&$uploaded): ResponseInterface {
+                    $this->assertSame('POST', $method);
+                    $this->assertSame('https://app.tolgee.com/v2/projects/translations', $url);
+                    $uploaded[] = json_decode($options['body'], true);
+
+                    return new MockResponse(json_encode(['translations' => []]));
+                },
             ]
-        ]), $this->getLogger(), $this->getDefaultLocale(), 'app.tolgee.com');
-
-        $provider->write($translatorBag);
-    }
-
-    public function testCompleteWriteProcessUpdateFiles()
-    {
-        $this->xliffFileDumper = new XliffFileDumper();
-
-        $expectedMessagesFileContent = <<<'XLIFF'
-<?xml version="1.0" encoding="utf-8"?>
-<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
-  <file source-language="en" target-language="en" datatype="plaintext" original="file.ext">
-    <header>
-      <tool tool-id="symfony" tool-name="Symfony"/>
-    </header>
-    <body>
-      <trans-unit id="ypeBEso" resname="a">
-        <source>a</source>
-        <target>trans_en_a</target>
-      </trans-unit>
-      <trans-unit id="PiPoFgA" resname="b">
-        <source>b</source>
-        <target>trans_en_b</target>
-      </trans-unit>
-    </body>
-  </file>
-</xliff>
-
-XLIFF;
-
-        $responses = [
-            'listFiles' => function (string $method, string $url): ResponseInterface {
-                $this->assertSame('GET', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/files', $url);
-
-                return new MockResponse(json_encode([
-                    'data' => [
-                        [
-                            'data' => [
-                                'id' => 12,
-                                'name' => 'messages.xlf',
-                            ]
-                        ],
-                    ],
-                ]));
-            },
-            'addStorage' => function (string $method, string $url, array $options = []) use (
-                $expectedMessagesFileContent
-            ): ResponseInterface {
-                $this->assertSame('POST', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/storages', $url);
-                $this->assertSame('Content-Type: application/octet-stream',
-                    $options['normalized_headers']['content-type'][0]);
-                $this->assertSame('Crowdin-API-FileName: messages.xlf',
-                    $options['normalized_headers']['crowdin-api-filename'][0]);
-                $this->assertSame($expectedMessagesFileContent, $options['body']);
-
-                return new MockResponse(json_encode(['data' => ['id' => 19]]),
-                    ['http_code' => 201]);
-            },
-            'UpdateFile' => function (
-                string $method,
-                string $url,
-                array $options = []
-            ): ResponseInterface {
-                $this->assertSame('PUT', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/files/12', $url);
-                $this->assertSame('{"storageId":19}', $options['body']);
-
-                return new MockResponse(json_encode([
-                    'data' => [
-                        'id' => 199,
-                        'name' => 'messages.xlf'
-                    ]
-                ]));
-            },
-        ];
+        );
 
         $translatorBag = new TranslatorBag();
-        $translatorBag->addCatalogue(new MessageCatalogue('en', [
-            'messages' => ['a' => 'trans_en_a', 'b' => 'trans_en_b'],
-        ]));
+        $translatorBag->addCatalogue(new MessageCatalogue('en', ['messages' => ['a' => 'trans_en_a']]));
+        $translatorBag->addCatalogue(new MessageCatalogue('fr', ['messages' => ['a' => 'trans_fr_a']]));
 
-        $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
-            'base_uri' => 'https://api.crowdin.com/api/v2/projects/1/',
-            'auth_bearer' => 'API_TOKEN',
-        ]), $this->getLogger(), $this->getDefaultLocale(),
-            'api.crowdin.com/api/v2/projects/1/');
+        $this->createTolgeeProvider($responses)->write($translatorBag);
 
-        $provider->write($translatorBag);
+        $this->assertSame([['name' => 'a', 'tags' => ['messages']]], $createdKeys);
+        $this->assertSame(
+            [['key' => 'a', 'translations' => ['en' => 'trans_en_a', 'fr' => 'trans_fr_a']]],
+            $uploaded
+        );
     }
 
-    #[DataProvider('getResponsesForProcessAddFileAndUploadTranslations')]
-    public function testCompleteWriteProcessAddFileAndUploadTranslations(
-        TranslatorBag $translatorBag,
-        string $expectedLocale,
-        string $expectedMessagesTranslationsContent
-    ) {
-        $this->xliffFileDumper = new XliffFileDumper();
-
-        $expectedMessagesFileContent = <<<'XLIFF'
-<?xml version="1.0" encoding="utf-8"?>
-<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
-  <file source-language="en" target-language="en" datatype="plaintext" original="file.ext">
-    <header>
-      <tool tool-id="symfony" tool-name="Symfony"/>
-    </header>
-    <body>
-      <trans-unit id="ypeBEso" resname="a">
-        <source>a</source>
-        <target>trans_en_a</target>
-      </trans-unit>
-    </body>
-  </file>
-</xliff>
-
-XLIFF;
-
-        $responses = [
-            'listFiles' => function (string $method, string $url): ResponseInterface {
-                $this->assertSame('GET', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/files', $url);
-
-                return new MockResponse(json_encode([
-                    'data' => [
-                        [
-                            'data' => [
-                                'id' => 12,
-                                'name' => 'messages.xlf',
-                            ]
-                        ],
-                    ],
-                ]));
-            },
-            'addStorage' => function (string $method, string $url, array $options = []) use (
-                $expectedMessagesFileContent
-            ): ResponseInterface {
-                $this->assertSame('POST', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/storages', $url);
-                $this->assertSame('Content-Type: application/octet-stream',
-                    $options['normalized_headers']['content-type'][0]);
-                $this->assertSame('Crowdin-API-FileName: messages.xlf',
-                    $options['normalized_headers']['crowdin-api-filename'][0]);
-                $this->assertSame($expectedMessagesFileContent, $options['body']);
-
-                return new MockResponse(json_encode(['data' => ['id' => 19]]),
-                    ['http_code' => 201]);
-            },
-            'updateFile' => function (
-                string $method,
-                string $url,
-                array $options = []
-            ): ResponseInterface {
-                $this->assertSame('PUT', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/files/12', $url);
-                $this->assertSame('{"storageId":19}', $options['body']);
-
-                return new MockResponse(json_encode([
-                    'data' => [
-                        'id' => 12,
-                        'name' => 'messages.xlf'
-                    ]
-                ]));
-            },
-            'addStorage2' => function (string $method, string $url, array $options = []) use (
-                $expectedMessagesTranslationsContent
-            ): ResponseInterface {
-                $this->assertSame('POST', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/storages', $url);
-                $this->assertSame('Content-Type: application/octet-stream',
-                    $options['normalized_headers']['content-type'][0]);
-                $this->assertSame('Crowdin-API-FileName: messages.xlf',
-                    $options['normalized_headers']['crowdin-api-filename'][0]);
-                $this->assertSame($expectedMessagesTranslationsContent, $options['body']);
-
-                return new MockResponse(json_encode(['data' => ['id' => 19]]),
-                    ['http_code' => 201]);
-            },
-            'UploadTranslations' => function (string $method, string $url, array $options = []) use
-            (
-                $expectedLocale
-            ): ResponseInterface {
-                $this->assertSame('POST', $method);
-                $this->assertSame(sprintf('https://api.crowdin.com/api/v2/projects/1/translations/%s',
-                    $expectedLocale), $url);
-                $this->assertSame('{"storageId":19,"fileId":12}', $options['body']);
-
-                return new MockResponse();
-            },
-        ];
-
-        $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
-            'base_uri' => 'https://api.crowdin.com/api/v2/projects/1/',
-            'auth_bearer' => 'API_TOKEN',
-        ]), $this->getLogger(), $this->getDefaultLocale(),
-            'api.crowdin.com/api/v2/projects/1/');
-
-        $provider->write($translatorBag);
-    }
-
-    public static function getResponsesForProcessAddFileAndUploadTranslations(): \Generator
+    public function testWriteTagsAnExistingKeyInsteadOfRecreatingIt()
     {
-        $arrayLoader = new ArrayLoader();
+        $tagged = [];
 
-        $translatorBagFr = new TranslatorBag();
-        $translatorBagFr->addCatalogue($arrayLoader->load([
-            'a' => 'trans_en_a',
-        ], 'en'));
-        $translatorBagFr->addCatalogue($arrayLoader->load([
-            'a' => 'trans_fr_a',
-        ], 'fr'));
+        $responses = array_merge(
+            // 'a' already exists, but tagged with 'messages' only.
+            $this->fetchAllKeysResponses(['en'], [
+                self::tolgeeKey(11, 'a', 'messages', ['en' => 'trans_en_a']),
+            ]),
+            [
+                function (string $method, string $url, array $options) use (&$tagged): ResponseInterface {
+                    $this->assertSame('PUT', $method);
+                    $this->assertSame('https://app.tolgee.com/v2/projects/keys/11/tags', $url);
+                    $tagged[] = json_decode($options['body'], true);
 
-        yield [
-            $translatorBagFr,
-            'fr',
-            <<<'XLIFF'
-<?xml version="1.0" encoding="utf-8"?>
-<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
-  <file source-language="en" target-language="fr" datatype="plaintext" original="file.ext">
-    <header>
-      <tool tool-id="symfony" tool-name="Symfony"/>
-    </header>
-    <body>
-      <trans-unit id="ypeBEso" resname="a">
-        <source>a</source>
-        <target>trans_fr_a</target>
-      </trans-unit>
-    </body>
-  </file>
-</xliff>
+                    return new MockResponse(json_encode([]));
+                },
+            ],
+            $this->fetchAllKeysResponses(['en'], [
+                self::tolgeeKey(11, 'a', 'validators', ['en' => 'trans_en_a']),
+            ])
+        );
 
-XLIFF
-        ];
+        $translatorBag = new TranslatorBag();
+        $translatorBag->addCatalogue(new MessageCatalogue('en', ['validators' => ['a' => 'trans_en_a']]));
 
-        $translatorBagEnGb = new TranslatorBag();
-        $translatorBagEnGb->addCatalogue($arrayLoader->load([
-            'a' => 'trans_en_a',
-        ], 'en'));
-        $translatorBagEnGb->addCatalogue($arrayLoader->load([
-            'a' => 'trans_en_gb_a',
-        ], 'en_GB'));
+        $this->createTolgeeProvider($responses)->write($translatorBag);
 
-        yield [
-            $translatorBagEnGb,
-            'en-GB',
-            <<<'XLIFF'
-<?xml version="1.0" encoding="utf-8"?>
-<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
-  <file source-language="en" target-language="en-GB" datatype="plaintext" original="file.ext">
-    <header>
-      <tool tool-id="symfony" tool-name="Symfony"/>
-    </header>
-    <body>
-      <trans-unit id="ypeBEso" resname="a">
-        <source>a</source>
-        <target>trans_en_gb_a</target>
-      </trans-unit>
-    </body>
-  </file>
-</xliff>
-
-XLIFF
-        ];
+        $this->assertSame([['name' => 'validators']], $tagged);
     }
 
-    #[DataProvider('getResponsesForOneLocaleAndOneDomain')]
-    public function testReadForOneLocaleAndOneDomain(
-        string $locale,
-        string $domain,
-        string $responseContent,
-        TranslatorBag $expectedTranslatorBag,
-        string $expectedTargetLanguageId
-    ) {
-        $responses = [
-            'listFiles' => function (string $method, string $url): ResponseInterface {
-                $this->assertSame('GET', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/files', $url);
-
-                return new MockResponse(json_encode([
-                    'data' => [
-                        [
-                            'data' => [
-                                'id' => 12,
-                                'name' => 'messages.xlf',
-                            ]
-                        ],
-                    ],
-                ]));
-            },
-            'exportProjectTranslations' => function (
-                string $method,
-                string $url,
-                array $options = []
-            ) use ($expectedTargetLanguageId): ResponseInterface {
-                $this->assertSame('POST', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/translations/exports',
-                    $url);
-                $this->assertSame(sprintf('{"targetLanguageId":"%s","fileIds":[12]}',
-                    $expectedTargetLanguageId), $options['body']);
-
-                return new MockResponse(json_encode(['data' => ['url' => 'https://file.url']]));
-            },
-            'downloadFile' => function (string $method, string $url) use ($responseContent
-            ): ResponseInterface {
-                $this->assertSame('GET', $method);
-                $this->assertSame('https://file.url/', $url);
-
-                return new MockResponse($responseContent);
-            },
-        ];
-
-        $loader = $this->getLoader();
-        $loader->expects($this->once())
-            ->method('load')
-            ->willReturn($expectedTranslatorBag->getCatalogue($locale));
-
-        $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
-            'base_uri' => 'https://api.crowdin.com/api/v2/projects/1/',
-            'auth_bearer' => 'API_TOKEN',
-        ]), $this->getLogger(), $this->getDefaultLocale(),
-            'api.crowdin.com/api/v2');
-
-        $translatorBag = $provider->read([$domain], [$locale]);
-
-        $this->assertEquals($expectedTranslatorBag->getCatalogues(),
-            $translatorBag->getCatalogues());
-    }
-
-    public static function getResponsesForOneLocaleAndOneDomain(): \Generator
+    public function testWriteSkipsTranslationsTolgeeAlreadyHas()
     {
-        $arrayLoader = new ArrayLoader();
+        $client = (new MockHttpClient($this->fetchAllKeysResponses(['en'], [
+            self::tolgeeKey(11, 'a', 'messages', ['en' => 'trans_en_a']),
+        ])))->withOptions(['base_uri' => 'https://app.tolgee.com']);
 
-        $expectedTranslatorBagFr = new TranslatorBag();
-        $expectedTranslatorBagFr->addCatalogue($arrayLoader->load([
-            'index.hello' => 'Bonjour',
-            'index.greetings' => 'Bienvenue, {firstname} !',
-        ], 'fr'));
+        $translatorBag = new TranslatorBag();
+        $translatorBag->addCatalogue(new MessageCatalogue('en', ['messages' => ['a' => 'trans_en_a']]));
 
-        yield [
-            'fr',
-            'messages',
-            <<<'XLIFF'
-<?xml version="1.0" encoding="UTF-8"?>
-<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
-  <file source-language="en" target-language="fr" datatype="database" tool-id="crowdin">
-    <header>
-      <tool tool-id="crowdin" tool-name="Crowdin" tool-version="1.0.25 20201211-1" tool-company="Crowdin"/>
-    </header>
-    <body>
-      <trans-unit id="crowdin:5fd89b853ee27904dd6c5f67" resname="index.hello" datatype="plaintext">
-        <source>index.hello</source>
-        <target state="translated">Bonjour</target>
-      </trans-unit>
-      <trans-unit id="crowdin:5fd89b8542e5aa5cc27457e2" resname="index.greetings" datatype="plaintext" extradata="crowdin:format=icu">
-        <source>index.greetings</source>
-        <target state="translated">Bienvenue, {firstname} !</target>
-      </trans-unit>
-    </body>
-  </file>
-</xliff>
-XLIFF
-            ,
-            $expectedTranslatorBagFr,
-            'fr',
-        ];
+        $this->createProvider(
+            $client,
+            $this->getLogger(),
+            $this->getDefaultLocale(),
+            'app.tolgee.com'
+        )->write($translatorBag);
 
-        $expectedTranslatorBagEnUs = new TranslatorBag();
-        $expectedTranslatorBagEnUs->addCatalogue($arrayLoader->load([
-            'index.hello' => 'Hello',
-            'index.greetings' => 'Welcome, {firstname}!',
-        ], 'en_GB'));
-
-        yield [
-            'en_GB',
-            'messages',
-            <<<'XLIFF'
-<?xml version="1.0" encoding="UTF-8"?>
-<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
-  <file source-language="en" target-language="en_GB" datatype="database" tool-id="crowdin">
-    <header>
-      <tool tool-id="crowdin" tool-name="Crowdin" tool-version="1.0.25 20201211-1" tool-company="Crowdin"/>
-    </header>
-    <body>
-      <trans-unit id="crowdin:5fd89b853ee27904dd6c5f67" resname="index.hello" datatype="plaintext">
-        <source>index.hello</source>
-        <target state="translated">Hello</target>
-      </trans-unit>
-      <trans-unit id="crowdin:5fd89b8542e5aa5cc27457e2" resname="index.greetings" datatype="plaintext" extradata="crowdin:format=icu">
-        <source>index.greetings</source>
-        <target state="translated">Welcome, {firstname}!</target>
-      </trans-unit>
-    </body>
-  </file>
-</xliff>
-XLIFF
-            ,
-            $expectedTranslatorBagEnUs,
-            'en-GB',
-        ];
+        // Nothing changed, so only the initial languages + translations reads happen:
+        // no key creation, no refetch, no translation upload.
+        $this->assertSame(2, $client->getRequestsCount());
     }
 
-    #[DataProvider('getResponsesForDefaultLocaleAndOneDomain')]
-    public function testReadForDefaultLocaleAndOneDomain(
-        string $locale,
-        string $domain,
-        string $responseContent,
-        TranslatorBag $expectedTranslatorBag
-    ) {
-        $responses = [
-            'listFiles' => function (string $method, string $url): ResponseInterface {
-                $this->assertSame('GET', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/files', $url);
-
-                return new MockResponse(json_encode([
-                    'data' => [
-                        [
-                            'data' => [
-                                'id' => 12,
-                                'name' => 'messages.xlf',
-                            ]
-                        ],
-                    ],
-                ]));
-            },
-            'downloadSource' => function (string $method, string $url): ResponseInterface {
-                $this->assertSame('GET', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/files/12/download',
-                    $url);
-
-                return new MockResponse(json_encode(['data' => ['url' => 'https://file.url']]));
-            },
-            'downloadFile' => function (string $method, string $url) use ($responseContent
-            ): ResponseInterface {
-                $this->assertSame('GET', $method);
-                $this->assertSame('https://file.url/', $url);
-
-                return new MockResponse($responseContent);
-            },
-        ];
-
-        $loader = $this->getLoader();
-        $loader->expects($this->once())
-            ->method('load')
-            ->willReturn($expectedTranslatorBag->getCatalogue($locale));
-
-        $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
-            'base_uri' => 'https://api.crowdin.com/api/v2/projects/1/',
-            'auth_bearer' => 'API_TOKEN',
-        ]), $this->getLogger(), $this->getDefaultLocale(),
-            'api.crowdin.com/api/v2');
-
-        $translatorBag = $provider->read([$domain], [$locale]);
-
-        $this->assertEquals($expectedTranslatorBag->getCatalogues(),
-            $translatorBag->getCatalogues());
-    }
-
-    public static function getResponsesForDefaultLocaleAndOneDomain(): \Generator
+    public function testWriteMarksSymfonyPlaceholderTranslationsAsUntranslated()
     {
-        $arrayLoader = new ArrayLoader();
+        $states = [];
 
-        $expectedTranslatorBagEn = new TranslatorBag();
-        $expectedTranslatorBagEn->addCatalogue($arrayLoader->load([
-            'index.hello' => 'Hello',
-            'index.greetings' => 'Welcome, {firstname} !',
-        ], 'en', 'messages'));
+        $responses = array_merge(
+            $this->fetchAllKeysResponses(['en'], [
+                self::tolgeeKey(11, 'a', 'messages', ['en' => 'something else']),
+            ]),
+            [
+                fn (): ResponseInterface => new MockResponse(json_encode([
+                    'translations' => [['id' => 501, 'text' => '__a']],
+                ])),
+                function (string $method, string $url) use (&$states): ResponseInterface {
+                    $this->assertSame('PUT', $method);
+                    $states[] = $url;
 
-        yield [
-            'en',
-            'messages',
-            <<<'XLIFF'
-<?xml version="1.0" encoding="UTF-8"?>
-<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
-  <file source-language="en" target-language="fr" datatype="plaintext" tool-id="crowdin">
-    <header>
-      <tool tool-id="symfony" tool-name="Symfony"/>
-    </header>
-    <body>
-      <trans-unit id="crowdin:5fd89b853ee27904dd6c5f67" resname="index.hello" datatype="plaintext">
-        <source>index.hello</source>
-        <target state="translated">Hello</target>
-      </trans-unit>
-      <trans-unit id="crowdin:5fd89b8542e5aa5cc27457e2" resname="index.greetings" datatype="plaintext" extradata="crowdin:format=icu">
-        <source>index.greetings</source>
-        <target state="translated">Welcome, {firstname} !</target>
-      </trans-unit>
-    </body>
-  </file>
-</xliff>
-XLIFF
-            ,
-            $expectedTranslatorBagEn,
-        ];
+                    return new MockResponse(json_encode([]));
+                },
+            ]
+        );
+
+        $translatorBag = new TranslatorBag();
+        $translatorBag->addCatalogue(new MessageCatalogue('en', ['messages' => ['a' => '__a']]));
+
+        $this->createTolgeeProvider($responses)->write($translatorBag);
+
+        $this->assertSame(
+            ['https://app.tolgee.com/v2/projects/translations/501/set-state/UNTRANSLATED'],
+            $states
+        );
+    }
+
+    public function testReadForOneLocaleAndOneDomain()
+    {
+        $responses = $this->fetchAllKeysResponses(['en', 'fr'], [
+            self::tolgeeKey(11, 'a', 'messages', ['en' => 'trans_en_a', 'fr' => 'trans_fr_a']),
+            self::tolgeeKey(22, 'b', 'messages', ['en' => 'trans_en_b']),
+        ]);
+
+        $bag = $this->createTolgeeProvider($responses)->read(['messages'], ['fr']);
+
+        $expected = new TranslatorBag();
+        $expected->addCatalogue(new MessageCatalogue('fr', ['messages' => ['a' => 'trans_fr_a']]));
+
+        $this->assertEquals($expected->getCatalogues(), $bag->getCatalogues());
+    }
+
+    public function testReadForSeveralLocalesAndDomains()
+    {
+        $responses = $this->fetchAllKeysResponses(['en'], [
+            self::tolgeeKey(11, 'a', 'messages', ['en' => 'trans_en_a']),
+            self::tolgeeKey(22, 'post.num_comments', 'validators', ['en' => '{count, plural, other {# comments}}']),
+        ]);
+
+        $bag = $this->createTolgeeProvider($responses)->read(['messages', 'validators'], ['en']);
+
+        $catalogue = $bag->getCatalogue('en');
+        $this->assertSame(['a' => 'trans_en_a'], $catalogue->all('messages'));
+        $this->assertSame(
+            ['post.num_comments' => '{count, plural, other {# comments}}'],
+            $catalogue->all('validators')
+        );
+    }
+
+    public function testReadSkipsDomainsTolgeeDoesNotKnow()
+    {
+        $responses = $this->fetchAllKeysResponses(['en'], [
+            self::tolgeeKey(11, 'a', 'messages', ['en' => 'trans_en_a']),
+        ]);
+
+        $bag = $this->createTolgeeProvider($responses)->read(['does_not_exist'], ['en']);
+
+        $this->assertSame([], $bag->getCatalogues());
+    }
+
+    public function testReadWalksEveryTranslationPage()
+    {
+        $responses = $this->fetchAllKeysResponses(
+            ['en'],
+            [self::tolgeeKey(11, 'a', 'messages', ['en' => 'trans_en_a'])],
+            [self::tolgeeKey(22, 'b', 'messages', ['en' => 'trans_en_b'])]
+        );
+
+        $bag = $this->createTolgeeProvider($responses)->read(['messages'], ['en']);
+
+        $this->assertSame(
+            ['a' => 'trans_en_a', 'b' => 'trans_en_b'],
+            $bag->getCatalogue('en')->all('messages')
+        );
     }
 
     public function testDelete()
