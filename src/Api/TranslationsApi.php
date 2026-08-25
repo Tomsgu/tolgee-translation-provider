@@ -7,6 +7,7 @@ namespace Tomsgu\TolgeeTranslationProvider\Api;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Tomsgu\TolgeeTranslationProvider\Exception\TolgeeApiException;
 use Tomsgu\TolgeeTranslationProvider\Model\Key;
 use Tomsgu\TolgeeTranslationProvider\Model\Tag;
 use Tomsgu\TolgeeTranslationProvider\Model\TolgeeCatalogue;
@@ -124,15 +125,18 @@ class TranslationsApi
 
     /**
      * @param array<int> $ids
+     *
+     * @throws TolgeeApiException
      */
     public function deleteKeys(array $ids): void
     {
         if ($ids === []) {
             return;
         }
-        $url = sprintf('/v2/projects/keys/%s', implode('|', $ids));
 
-        $response = $this->client->request('DELETE', $url);
+        $response = $this->client->request('DELETE', '/v2/projects/keys', [
+            'json' => ['ids' => array_values($ids)],
+        ]);
 
         if ($response->getStatusCode() !== Response::HTTP_OK) {
             $error = sprintf(
@@ -141,6 +145,8 @@ class TranslationsApi
                 $response->getContent(false)
             );
             $this->logger->error($error);
+
+            throw new TolgeeApiException($error);
         }
     }
 
