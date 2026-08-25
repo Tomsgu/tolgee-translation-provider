@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tomsgu\TolgeeTranslationProvider\Tests;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -25,15 +26,20 @@ abstract class ProviderTestCase extends TestCase
     abstract public function createProvider(HttpClientInterface $client, LoggerInterface $logger, string $defaultLocale, string $endpoint): ProviderInterface;
 
     /**
-     * @return iterable<array{0: string, 1: ProviderInterface}>
+     * @return iterable<array{0: string, 1: string, 2: string}>
      */
-    abstract public function toStringProvider(): iterable;
+    abstract public static function toStringProvider(): iterable;
 
-    /**
-     * @dataProvider toStringProvider
-     */
-    public function testToString(ProviderInterface $provider, string $expected)
+    #[DataProvider('toStringProvider')]
+    public function testToString(string $baseUri, string $endpoint, string $expected)
     {
+        $provider = $this->createProvider(
+            $this->getClient()->withOptions(['base_uri' => $baseUri]),
+            $this->getLogger(),
+            $this->getDefaultLocale(),
+            $endpoint
+        );
+
         $this->assertSame($expected, (string) $provider);
     }
 

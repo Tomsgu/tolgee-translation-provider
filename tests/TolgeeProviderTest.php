@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tomsgu\TolgeeTranslationProvider\Tests;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
@@ -15,6 +16,7 @@ use Symfony\Component\Translation\Provider\ProviderInterface;
 use Symfony\Component\Translation\TranslatorBag;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
+use Tomsgu\TolgeeTranslationProvider\Exception\TolgeeApiException;
 use Tomsgu\TolgeeTranslationProvider\TolgeeProvider;
 
 class TolgeeProviderTest extends ProviderTestCase
@@ -28,40 +30,11 @@ class TolgeeProviderTest extends ProviderTestCase
         return new TolgeeProvider($client, $logger, $defaultLocale, $endpoint);
     }
 
-    public function toStringProvider(): iterable
+    public static function toStringProvider(): iterable
     {
-        yield [
-            $this->createProvider($this->getClient()->withOptions([
-                'base_uri' => 'https://app.tolgee.com',
-                'query' => [
-                    'ak' => 'API_KEY',
-                ]
-            ]), $this->getLogger(), $this->getDefaultLocale(),
-                'app.tolgee.com'),
-            'tolgee://API_KEY@app.tolgee.com',
-        ];
-
-        yield [
-            $this->createProvider($this->getClient()->withOptions([
-                'base_uri' => 'https://domain.tolgee.com',
-                'query' => [
-                    'ak' => 'API_KEY',
-                ]
-            ]), $this->getLogger(), $this->getDefaultLocale(),
-                'domain.tolgee.com'),
-            'tolgee://API_KEY@domain.tolgee.com',
-        ];
-
-        yield [
-            $this->createProvider($this->getClient()->withOptions([
-                'base_uri' => 'https://app.tolgee.com:99',
-                'query' => [
-                    'ak' => 'API_KEY',
-                ]
-            ]), $this->getLogger(), $this->getDefaultLocale(),
-                'app.tolgee.com:99'),
-            'tolgee://API_KEY@app.tolgee.com:99',
-        ];
+        yield ['https://app.tolgee.com', 'app.tolgee.com', 'tolgee://app.tolgee.com'];
+        yield ['https://domain.tolgee.com', 'domain.tolgee.com', 'tolgee://domain.tolgee.com'];
+        yield ['https://app.tolgee.com:99', 'app.tolgee.com:99', 'tolgee://app.tolgee.com:99'];
     }
 
     public function testCompleteWriteProcessAddFiles()
@@ -283,15 +256,13 @@ XLIFF;
         $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
             'base_uri' => 'https://api.crowdin.com/api/v2/projects/1/',
             'auth_bearer' => 'API_TOKEN',
-        ]), $this->getLoader(), $this->getLogger(), $this->getDefaultLocale(),
+        ]), $this->getLogger(), $this->getDefaultLocale(),
             'api.crowdin.com/api/v2/projects/1/');
 
         $provider->write($translatorBag);
     }
 
-    /**
-     * @dataProvider getResponsesForProcessAddFileAndUploadTranslations
-     */
+    #[DataProvider('getResponsesForProcessAddFileAndUploadTranslations')]
     public function testCompleteWriteProcessAddFileAndUploadTranslations(
         TranslatorBag $translatorBag,
         string $expectedLocale,
@@ -393,13 +364,13 @@ XLIFF;
         $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
             'base_uri' => 'https://api.crowdin.com/api/v2/projects/1/',
             'auth_bearer' => 'API_TOKEN',
-        ]), $this->getLoader(), $this->getLogger(), $this->getDefaultLocale(),
+        ]), $this->getLogger(), $this->getDefaultLocale(),
             'api.crowdin.com/api/v2/projects/1/');
 
         $provider->write($translatorBag);
     }
 
-    public function getResponsesForProcessAddFileAndUploadTranslations(): \Generator
+    public static function getResponsesForProcessAddFileAndUploadTranslations(): \Generator
     {
         $arrayLoader = new ArrayLoader();
 
@@ -464,9 +435,7 @@ XLIFF
         ];
     }
 
-    /**
-     * @dataProvider getResponsesForOneLocaleAndOneDomain
-     */
+    #[DataProvider('getResponsesForOneLocaleAndOneDomain')]
     public function testReadForOneLocaleAndOneDomain(
         string $locale,
         string $domain,
@@ -517,19 +486,19 @@ XLIFF
             ->method('load')
             ->willReturn($expectedTranslatorBag->getCatalogue($locale));
 
-        $crowdinProvider = $this->createProvider((new MockHttpClient($responses))->withOptions([
+        $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
             'base_uri' => 'https://api.crowdin.com/api/v2/projects/1/',
             'auth_bearer' => 'API_TOKEN',
-        ]), $this->getLoader(), $this->getLogger(), $this->getDefaultLocale(),
+        ]), $this->getLogger(), $this->getDefaultLocale(),
             'api.crowdin.com/api/v2');
 
-        $translatorBag = $crowdinProvider->read([$domain], [$locale]);
+        $translatorBag = $provider->read([$domain], [$locale]);
 
         $this->assertEquals($expectedTranslatorBag->getCatalogues(),
             $translatorBag->getCatalogues());
     }
 
-    public function getResponsesForOneLocaleAndOneDomain(): \Generator
+    public static function getResponsesForOneLocaleAndOneDomain(): \Generator
     {
         $arrayLoader = new ArrayLoader();
 
@@ -602,9 +571,7 @@ XLIFF
         ];
     }
 
-    /**
-     * @dataProvider getResponsesForDefaultLocaleAndOneDomain
-     */
+    #[DataProvider('getResponsesForDefaultLocaleAndOneDomain')]
     public function testReadForDefaultLocaleAndOneDomain(
         string $locale,
         string $domain,
@@ -648,19 +615,19 @@ XLIFF
             ->method('load')
             ->willReturn($expectedTranslatorBag->getCatalogue($locale));
 
-        $crowdinProvider = $this->createProvider((new MockHttpClient($responses))->withOptions([
+        $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
             'base_uri' => 'https://api.crowdin.com/api/v2/projects/1/',
             'auth_bearer' => 'API_TOKEN',
-        ]), $this->getLoader(), $this->getLogger(), $this->getDefaultLocale(),
+        ]), $this->getLogger(), $this->getDefaultLocale(),
             'api.crowdin.com/api/v2');
 
-        $translatorBag = $crowdinProvider->read([$domain], [$locale]);
+        $translatorBag = $provider->read([$domain], [$locale]);
 
         $this->assertEquals($expectedTranslatorBag->getCatalogues(),
             $translatorBag->getCatalogues());
     }
 
-    public function getResponsesForDefaultLocaleAndOneDomain(): \Generator
+    public static function getResponsesForDefaultLocaleAndOneDomain(): \Generator
     {
         $arrayLoader = new ArrayLoader();
 
@@ -700,58 +667,56 @@ XLIFF
 
     public function testDelete()
     {
+        $deleteBody = null;
+
         $responses = [
-            'listFiles' => function (string $method, string $url): ResponseInterface {
+            'listLanguages' => function (string $method, string $url): ResponseInterface {
                 $this->assertSame('GET', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/files', $url);
+                $this->assertSame('https://app.tolgee.com/v2/projects/languages?size=2000&page=0', $url);
 
                 return new MockResponse(json_encode([
-                    'data' => [
-                        [
-                            'data' => [
-                                'id' => 12,
-                                'name' => 'messages.xlf',
-                            ]
+                    '_embedded' => ['languages' => [['tag' => 'en']]],
+                ]));
+            },
+            'listTranslations' => function (string $method, string $url): ResponseInterface {
+                $this->assertSame('GET', $method);
+                $this->assertSame(
+                    'https://app.tolgee.com/v2/projects/translations?size=2000&languages=en&page=0',
+                    $url
+                );
+
+                return new MockResponse(json_encode([
+                    '_embedded' => [
+                        'keys' => [
+                            [
+                                'keyId' => 11,
+                                'keyName' => 'en a',
+                                'keyTags' => [['id' => 1, 'name' => 'messages']],
+                                'translations' => ['en' => ['id' => 101, 'text' => 'en a']],
+                            ],
+                            [
+                                'keyId' => 22,
+                                'keyName' => 'en b',
+                                'keyTags' => [['id' => 1, 'name' => 'messages']],
+                                'translations' => ['en' => ['id' => 102, 'text' => 'en b']],
+                            ],
+                            [
+                                'keyId' => 33,
+                                'keyName' => 'keep me',
+                                'keyTags' => [['id' => 1, 'name' => 'messages']],
+                                'translations' => ['en' => ['id' => 103, 'text' => 'keep me']],
+                            ],
                         ],
                     ],
+                    'page' => ['number' => 0, 'totalPages' => 1],
                 ]));
             },
-            'listStrings1' => function (string $method, string $url): ResponseInterface {
-                $this->assertSame('GET', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/strings?fileId=12&limit=500&offset=0',
-                    $url);
-
-                return new MockResponse(json_encode([
-                    'data' => [
-                        ['data' => ['id' => 1, 'text' => 'en a']],
-                        ['data' => ['id' => 2, 'text' => 'en b']],
-                    ],
-                ]));
-            },
-            'listStrings2' => function (string $method, string $url): ResponseInterface {
-                $this->assertSame('GET', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/strings?fileId=12&limit=500&offset=500',
-                    $url);
-
-                $response = $this->createMock(ResponseInterface::class);
-                $response->expects($this->any())
-                    ->method('getContent')
-                    ->with(false)
-                    ->willReturn(json_encode(['data' => []]));
-
-                return $response;
-            },
-            'deleteString1' => function (string $method, string $url): ResponseInterface {
+            'deleteKeys' => function (string $method, string $url, array $options) use (&$deleteBody): ResponseInterface {
                 $this->assertSame('DELETE', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/strings/1', $url);
+                $this->assertSame('https://app.tolgee.com/v2/projects/keys', $url);
+                $deleteBody = json_decode($options['body'], true);
 
-                return new MockResponse('', ['http_code' => 204]);
-            },
-            'deleteString2' => function (string $method, string $url): ResponseInterface {
-                $this->assertSame('DELETE', $method);
-                $this->assertSame('https://api.crowdin.com/api/v2/projects/1/strings/2', $url);
-
-                return new MockResponse('', ['http_code' => 204]);
+                return new MockResponse('', ['http_code' => 200]);
             },
         ];
 
@@ -764,11 +729,79 @@ XLIFF
         ]));
 
         $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
-            'base_uri' => 'https://api.crowdin.com/api/v2/projects/1/',
-            'auth_bearer' => 'API_TOKEN',
-        ]), $this->getLoader(), $this->getLogger(), $this->getDefaultLocale(),
-            'api.crowdin.com/api/v2/projects/1/');
+            'base_uri' => 'https://app.tolgee.com',
+        ]), $this->getLogger(), $this->getDefaultLocale(), 'app.tolgee.com');
 
         $provider->delete($translatorBag);
+
+        $this->assertSame(['ids' => [11, 22]], $deleteBody);
+    }
+
+    public function testDeleteThrowsWhenTolgeeRejectsTheCall()
+    {
+        $responses = [
+            'listLanguages' => fn (): ResponseInterface => new MockResponse(json_encode([
+                '_embedded' => ['languages' => [['tag' => 'en']]],
+            ])),
+            'listTranslations' => fn (): ResponseInterface => new MockResponse(json_encode([
+                '_embedded' => [
+                    'keys' => [
+                        [
+                            'keyId' => 11,
+                            'keyName' => 'en a',
+                            'keyTags' => [['id' => 1, 'name' => 'messages']],
+                            'translations' => ['en' => ['id' => 101, 'text' => 'en a']],
+                        ],
+                    ],
+                ],
+                'page' => ['number' => 0, 'totalPages' => 1],
+            ])),
+            'deleteKeys' => fn (): ResponseInterface => new MockResponse('', ['http_code' => 405]),
+        ];
+
+        $translatorBag = new TranslatorBag();
+        $translatorBag->addCatalogue(new MessageCatalogue('en', [
+            'messages' => ['en a' => 'en a'],
+        ]));
+
+        $provider = $this->createProvider((new MockHttpClient($responses))->withOptions([
+            'base_uri' => 'https://app.tolgee.com',
+        ]), $this->getLogger(), $this->getDefaultLocale(), 'app.tolgee.com');
+
+        $this->expectException(TolgeeApiException::class);
+        $this->expectExceptionMessageMatches('/status code: "405"/');
+
+        $provider->delete($translatorBag);
+    }
+
+    public function testDeleteWithNothingToRemoveMakesNoDeleteCall()
+    {
+        $responses = [
+            'listLanguages' => fn (): ResponseInterface => new MockResponse(json_encode([
+                '_embedded' => ['languages' => [['tag' => 'en']]],
+            ])),
+            'listTranslations' => fn (): ResponseInterface => new MockResponse(json_encode([
+                '_embedded' => ['keys' => []],
+                'page' => ['number' => 0, 'totalPages' => 1],
+            ])),
+        ];
+
+        $client = (new MockHttpClient($responses))->withOptions(['base_uri' => 'https://app.tolgee.com']);
+
+        $translatorBag = new TranslatorBag();
+        $translatorBag->addCatalogue(new MessageCatalogue('en', [
+            'messages' => ['en a' => 'en a'],
+        ]));
+
+        $provider = $this->createProvider(
+            $client,
+            $this->getLogger(),
+            $this->getDefaultLocale(),
+            'app.tolgee.com'
+        );
+
+        $provider->delete($translatorBag);
+
+        $this->assertSame(2, $client->getRequestsCount());
     }
 }
